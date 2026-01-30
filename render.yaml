@@ -1,8 +1,8 @@
-staticSites:
-  - name: quantum-ai-center
+services:
+  - type: static
+    name: quantum-ai-center
     buildCommand: npm run build
     publishDir: dist
     envVars:
       - key: GEMINI_API_KEY
         sync: false
-        placeholder: "Your Gemini API Key"

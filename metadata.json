@@ -1,0 +1,9 @@
+{
+  "name": "Yapay Zeka Merkezi",
+  "description": "The ultimate AI Command Center. A centralized hub for advanced reasoning, creative synthesis, and autonomous system control powered by Gemini 3 Pro.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

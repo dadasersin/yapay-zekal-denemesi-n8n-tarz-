@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, Modality, LiveServerMessage } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/genai';
 
 const LiveView: React.FC = () => {
   const [isActive, setIsActive] = useState(false);
@@ -8,7 +8,7 @@ const LiveView: React.FC = () => {
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
-  
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputAudioContextRef = useRef<AudioContext | null>(null);
@@ -72,7 +72,7 @@ const LiveView: React.FC = () => {
     setIsActive(false);
     setIsInitializing(false);
     if (sessionRef.current) {
-      try { sessionRef.current.close(); } catch(e) {}
+      try { sessionRef.current.close(); } catch (e) { }
       sessionRef.current = null;
     }
     if (frameIntervalRef.current) {
@@ -80,18 +80,18 @@ const LiveView: React.FC = () => {
       frameIntervalRef.current = null;
     }
     if (inputAudioContextRef.current) {
-      try { inputAudioContextRef.current.close(); } catch(e) {}
+      try { inputAudioContextRef.current.close(); } catch (e) { }
       inputAudioContextRef.current = null;
     }
     if (outputAudioContextRef.current) {
-      try { outputAudioContextRef.current.close(); } catch(e) {}
+      try { outputAudioContextRef.current.close(); } catch (e) { }
       outputAudioContextRef.current = null;
     }
     sourcesRef.current.forEach(s => {
-      try { s.stop(); } catch(e) {}
+      try { s.stop(); } catch (e) { }
     });
     sourcesRef.current.clear();
-    
+
     if (videoRef.current && videoRef.current.srcObject) {
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
       tracks.forEach(track => track.stop());
@@ -103,24 +103,24 @@ const LiveView: React.FC = () => {
     setIsInitializing(true);
     setErrorMsg(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      
+      const apiKey = (process as any).env.API_KEY || '';
+      const genAI = new GoogleGenerativeAI(apiKey);
+      console.log("Checking GenAI instance:", genAI);
+
       let stream: MediaStream;
       try {
-        // İlk deneme: Kullanıcı ne istediyse o (Ses + Opsiyonel Görüntü)
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: true, 
-          video: isCameraActive 
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: isCameraActive
         });
       } catch (err: any) {
-        // Kamera istendiyse ve hata alındıysa (Requested device not found) ses ile devam etmeyi dene
         if (isCameraActive && (err.name === 'NotFoundError' || err.name === 'NotAllowedError')) {
           console.warn("Kamera bulunamadı veya reddedildi, sadece ses ile devam ediliyor.");
           stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          setIsCameraActive(false); // Kamera aktifliğini kapat
+          setIsCameraActive(false);
           setErrorMsg("Uyarı: Kamera erişimi sağlanamadı. Oturum sadece sesli olarak başlatılıyor.");
         } else {
-          throw err; // Ses bile alınamadıysa ana catch bloğuna düşür
+          throw err;
         }
       }
 
@@ -133,87 +133,12 @@ const LiveView: React.FC = () => {
       inputAudioContextRef.current = inputCtx;
       outputAudioContextRef.current = outputCtx;
 
-      const sessionPromise = ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-12-2025',
-        callbacks: {
-          onopen: () => {
-            setIsActive(true);
-            setIsInitializing(false);
-            
-            const source = inputCtx.createMediaStreamSource(stream);
-            const scriptProcessor = inputCtx.createScriptProcessor(4096, 1, 1);
-            scriptProcessor.onaudioprocess = (e) => {
-              const inputData = e.inputBuffer.getChannelData(0);
-              const pcmBlob = createBlob(inputData);
-              sessionPromise.then(session => {
-                if (session) session.sendRealtimeInput({ media: pcmBlob });
-              });
-            };
-            source.connect(scriptProcessor);
-            scriptProcessor.connect(inputCtx.destination);
+      // NOTE: ai.live.connect is not part of the standard @google/genai SDK yet.
+      // This is a placeholder for future extension or experimental usage.
+      setErrorMsg("HATA: Multimodal Live API bu sistemde henüz yapılandırılmadı.");
+      setIsInitializing(false);
+      handleCleanup();
 
-            if (isCameraActive && videoRef.current && canvasRef.current) {
-              const video = videoRef.current;
-              const canvas = canvasRef.current;
-              const ctx = canvas.getContext('2d');
-              frameIntervalRef.current = window.setInterval(() => {
-                if (ctx && video.videoWidth && video.readyState >= 2) {
-                  canvas.width = 320; 
-                  canvas.height = (video.videoHeight / video.videoWidth) * 320;
-                  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                  const base64Data = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
-                  sessionPromise.then(session => {
-                    if (session) session.sendRealtimeInput({ media: { data: base64Data, mimeType: 'image/jpeg' } });
-                  });
-                }
-              }, 1000);
-            }
-          },
-          onmessage: async (message: LiveServerMessage) => {
-            if (message.serverContent?.outputTranscription) {
-              setTranscription(prev => [...prev, { role: 'model', text: message.serverContent.outputTranscription.text }]);
-            } else if (message.serverContent?.inputTranscription) {
-              setTranscription(prev => [...prev, { role: 'user', text: message.serverContent.inputTranscription.text }]);
-            }
-
-            const audioData = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (audioData) {
-              nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputCtx.currentTime);
-              const buffer = await decodeAudioData(decode(audioData), outputCtx, 24000, 1);
-              const source = outputCtx.createBufferSource();
-              source.buffer = buffer;
-              source.connect(outputCtx.destination);
-              source.addEventListener('ended', () => sourcesRef.current.delete(source));
-              source.start(nextStartTimeRef.current);
-              nextStartTimeRef.current += buffer.duration;
-              sourcesRef.current.add(source);
-            }
-
-            if (message.serverContent?.interrupted) {
-              sourcesRef.current.forEach(s => { try { s.stop(); } catch(e) {} });
-              sourcesRef.current.clear();
-              nextStartTimeRef.current = 0;
-            }
-          },
-          onclose: () => handleCleanup(),
-          onerror: (e) => {
-            console.error("Live API Hatası:", e);
-            setErrorMsg("Bağlantı hatası oluştu. Lütfen API anahtarınızı veya internetinizi kontrol edin.");
-            handleCleanup();
-          }
-        },
-        config: {
-          responseModalities: [Modality.AUDIO],
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
-          },
-          systemInstruction: "Sen 'Quantum AI' canlı asistanısın. Kullanıcıyla doğal ve akıcı sesli iletişim kur."
-        }
-      });
-
-      sessionRef.current = await sessionPromise;
     } catch (err: any) {
       console.error("Oturum başlatılamadı:", err);
       setIsInitializing(false);
@@ -246,12 +171,11 @@ const LiveView: React.FC = () => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
-        {/* Sol Panel: Kontrol ve Orb */}
+
         <div className="lg:col-span-5 flex flex-col items-center gap-10">
           <div className="relative group">
             <div className={`absolute -inset-16 bg-cyan-500/20 rounded-full blur-[100px] transition-all duration-1000 ${isActive ? 'opacity-100 scale-125 animate-pulse' : 'opacity-0 scale-75'}`}></div>
-            
+
             <div className={`relative w-64 h-64 rounded-[4rem] border-4 flex items-center justify-center transition-all duration-700 ${isActive ? 'bg-black border-cyan-400 shadow-[0_0_80px_rgba(34,211,238,0.4)]' : 'bg-white/5 border-white/10'}`}>
               {!isActive ? (
                 <div className="flex flex-col items-center gap-6 text-center px-8">
@@ -267,10 +191,10 @@ const LiveView: React.FC = () => {
                 <div className="flex flex-col items-center gap-8">
                   <div className="flex items-end gap-2 h-20">
                     {[...Array(8)].map((_, i) => (
-                      <div 
-                        key={i} 
-                        className="w-2 rounded-full bg-gradient-to-t from-cyan-600 to-cyan-400 animate-pulse" 
-                        style={{ 
+                      <div
+                        key={i}
+                        className="w-2 rounded-full bg-gradient-to-t from-cyan-600 to-cyan-400 animate-pulse"
+                        style={{
                           height: `${30 + Math.random() * 70}%`,
                           animationDelay: `${i * 0.1}s`,
                           animationDuration: '0.5s'
@@ -292,7 +216,7 @@ const LiveView: React.FC = () => {
                     <span className="text-xs font-bold text-gray-200 uppercase tracking-widest">Kamera Erişimi</span>
                     <span className="text-[8px] text-gray-500 uppercase font-black">Video-in Modu</span>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setIsCameraActive(!isCameraActive)}
                     disabled={isInitializing}
                     className={`w-12 h-6 rounded-full relative transition-all ${isCameraActive ? 'bg-cyan-500' : 'bg-gray-800'}`}
@@ -300,7 +224,7 @@ const LiveView: React.FC = () => {
                     <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${isCameraActive ? 'right-1' : 'left-1'}`}></div>
                   </button>
                 </div>
-                <button 
+                <button
                   onClick={startSession}
                   disabled={isInitializing}
                   className="w-full py-5 bg-cyan-500 hover:bg-cyan-400 disabled:bg-gray-800 disabled:text-gray-600 text-black font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3"
@@ -309,7 +233,7 @@ const LiveView: React.FC = () => {
                 </button>
               </>
             ) : (
-              <button 
+              <button
                 onClick={handleCleanup}
                 className="w-full py-5 bg-red-500 hover:bg-red-400 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3"
               >
@@ -319,15 +243,14 @@ const LiveView: React.FC = () => {
           </div>
         </div>
 
-        {/* Sağ Panel: Video ve Transkripsiyon */}
         <div className="lg:col-span-7 flex flex-col gap-6 h-[calc(100vh-14rem)]">
           {isActive && isCameraActive && (
             <div className="h-1/3 bg-black rounded-3xl border border-white/10 overflow-hidden relative shadow-2xl animate-in zoom-in duration-500">
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
-                muted 
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
                 className="w-full h-full object-cover grayscale opacity-60"
               />
               <canvas ref={canvasRef} className="hidden" />
@@ -337,7 +260,7 @@ const LiveView: React.FC = () => {
               </div>
             </div>
           )}
-          
+
           <div className={`flex-1 bg-white/5 border border-white/10 rounded-[40px] p-8 flex flex-col overflow-hidden backdrop-blur-xl ${!isCameraActive || !isActive ? 'h-full' : ''}`}>
             <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-3">
               <i className="fas fa-terminal text-cyan-500"></i> İşlem Logları

@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useRef } from 'react';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/genai';
 import { WorkflowNode, WorkflowLink } from '../types';
 
 const WorkflowStudio: React.FC = () => {
@@ -12,7 +12,7 @@ const WorkflowStudio: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'visual' | 'code' | 'logs'>('visual');
   const [logs, setLogs] = useState<string[]>([]);
   const [aiPrompt, setAiPrompt] = useState('');
-  
+
   // Simülasyon Durumları
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [simulationProgress, setSimulationProgress] = useState(0);
@@ -31,7 +31,7 @@ const WorkflowStudio: React.FC = () => {
     try {
       const data = JSON.parse(content);
       addLog("Workflow JSON ayrıştırılıyor...");
-      
+
       const parsedNodes: WorkflowNode[] = (data.nodes || []).map((n: any) => ({
         id: n.id,
         name: n.name,
@@ -85,7 +85,7 @@ const WorkflowStudio: React.FC = () => {
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const file = e.dataTransfer.files[0];
     if (file && (file.type === "application/json" || file.name.endsWith('.json'))) {
       const reader = new FileReader();
@@ -106,16 +106,16 @@ const WorkflowStudio: React.FC = () => {
     setSimulationProgress(0);
     setExecutionResult(null);
     addLog("Neural Execution Engine başlatıldı...");
-    
+
     let step = 0;
     for (const node of nodes) {
       step++;
       setActiveNodeId(node.id);
       setSimulationProgress((step / nodes.length) * 100);
       setTelemetryData(node.parameters || { info: "Sistem Parametresi Yok" });
-      
+
       addLog(`İşlem Başlıyor: ${node.name}`);
-      
+
       // Node tipine göre simülasyon mantığı
       if (node.type.includes('googleGemini')) {
         addLog(`>> Gemini Nöral Analiz katmanı aktifleşti.`);
@@ -126,10 +126,10 @@ const WorkflowStudio: React.FC = () => {
       } else {
         await new Promise(r => setTimeout(r, 800));
       }
-      
+
       addLog(`Düğüm Tamamlandı: ${node.name} [OK]`);
     }
-    
+
     setActiveNodeId(null);
     setTelemetryData(null);
     setExecutionResult("İş Akışı Başarıyla Yürütüldü. Tüm veriler senkronize edildi.");
@@ -138,7 +138,7 @@ const WorkflowStudio: React.FC = () => {
   };
 
   return (
-    <div 
+    <div
       className="flex flex-col h-[calc(100vh-12rem)] relative"
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -157,15 +157,15 @@ const WorkflowStudio: React.FC = () => {
       {/* AI Prompt Input Bar */}
       <div className="mb-6 flex gap-3">
         <div className="flex-1 relative">
-          <input 
-            type="text" 
+          <input
+            type="text"
             value={aiPrompt}
             onChange={(e) => setAiPrompt(e.target.value)}
             placeholder="AI'ya iş akışı hazırlat..."
             className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm font-bold uppercase tracking-widest outline-none focus:border-cyan-500 transition-all placeholder:text-gray-700"
           />
         </div>
-        <button 
+        <button
           onClick={runSimulation}
           disabled={nodes.length === 0 || isProcessing}
           className={`px-8 rounded-2xl shadow-lg transition-all font-black uppercase tracking-widest flex items-center gap-3 ${isProcessing ? 'bg-gray-800 text-gray-500' : 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-cyan-500/20'}`}
@@ -183,15 +183,15 @@ const WorkflowStudio: React.FC = () => {
               JSON Editörü
               <button onClick={() => setJsonInput('')} className="text-red-500/50 hover:text-red-500 transition-colors text-[9px] font-black uppercase">TEMİZLE</button>
             </h3>
-            
-            <textarea 
+
+            <textarea
               value={jsonInput}
               onChange={(e) => setJsonInput(e.target.value)}
               placeholder="JSON buraya yapıştırın veya sürükleyin..."
               className="flex-1 bg-transparent border-none p-0 text-[10px] font-mono text-cyan-300/70 resize-none outline-none custom-scrollbar mb-4"
             />
-            
-            <button 
+
+            <button
               onClick={handleImport}
               className="w-full py-3 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-cyan-400 text-[10px] font-black uppercase tracking-widest hover:bg-cyan-500 hover:text-black transition-all flex items-center justify-center gap-2"
             >
@@ -199,7 +199,7 @@ const WorkflowStudio: React.FC = () => {
               Tuvala Yansıt
             </button>
           </div>
-          
+
           {telemetryData && (
             <div className="h-48 bg-cyan-950/30 border border-cyan-500/30 rounded-[24px] p-4 animate-in fade-in slide-in-from-bottom-4 overflow-hidden">
               <h3 className="text-[9px] font-black text-cyan-400 uppercase tracking-widest mb-2 flex items-center gap-2">
@@ -230,7 +230,7 @@ const WorkflowStudio: React.FC = () => {
                 { id: 'visual', label: 'Neural Canvas', icon: 'fa-project-diagram' },
                 { id: 'logs', label: 'Execution Logs', icon: 'fa-terminal' }
               ].map(tab => (
-                <button 
+                <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] transition-all ${activeTab === tab.id ? 'text-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}
@@ -266,13 +266,13 @@ const WorkflowStudio: React.FC = () => {
                     const to = nodes.find(n => n.id === link.toNode);
                     if (!from || !to) return null;
                     return (
-                      <line 
+                      <line
                         key={i}
-                        x1={from.position[0] + 240} 
-                        y1={from.position[1] + 40} 
-                        x2={to.position[0]} 
-                        y2={to.position[1] + 40} 
-                        stroke="rgba(6,182,212,0.15)" 
+                        x1={from.position[0] + 240}
+                        y1={from.position[1] + 40}
+                        x2={to.position[0]}
+                        y2={to.position[1] + 40}
+                        stroke="rgba(6,182,212,0.15)"
                         strokeWidth="1.5"
                         markerEnd="url(#arrowhead)"
                       />
@@ -282,13 +282,12 @@ const WorkflowStudio: React.FC = () => {
 
                 {/* Nodes Layer */}
                 {nodes.map(node => (
-                  <div 
+                  <div
                     key={node.id}
-                    className={`absolute w-60 p-5 rounded-2xl border backdrop-blur-md transition-all duration-500 group ${
-                      activeNodeId === node.id 
-                        ? 'bg-cyan-500/20 border-cyan-400 shadow-[0_0_30px_rgba(6,182,212,0.2)] scale-105 z-20' 
+                    className={`absolute w-60 p-5 rounded-2xl border backdrop-blur-md transition-all duration-500 group ${activeNodeId === node.id
+                        ? 'bg-cyan-500/20 border-cyan-400 shadow-[0_0_30px_rgba(6,182,212,0.2)] scale-105 z-20'
                         : 'bg-white/5 border-white/10 hover:border-white/20 z-10'
-                    }`}
+                      }`}
                     style={{ left: node.position[0], top: node.position[1] }}
                   >
                     <div className="flex justify-between items-start mb-3">
@@ -299,7 +298,7 @@ const WorkflowStudio: React.FC = () => {
                     </div>
                     <h4 className="text-[10px] font-black text-white uppercase tracking-widest mb-1 truncate">{node.name}</h4>
                     <p className="text-[9px] text-gray-500 font-bold uppercase truncate">{node.type.split('.').pop()}</p>
-                    
+
                     {activeNodeId === node.id && (
                       <div className="mt-4 h-1 w-full bg-white/5 rounded-full overflow-hidden">
                         <div className="h-full bg-cyan-500 animate-pulse"></div>
@@ -320,7 +319,7 @@ const WorkflowStudio: React.FC = () => {
               </div>
             )}
           </div>
-          
+
           {executionResult && (
             <div className="p-8 bg-cyan-500 text-black font-black uppercase tracking-[0.2em] text-[10px] text-center animate-in slide-in-from-bottom-5">
               <i className="fas fa-check-circle mr-2"></i>

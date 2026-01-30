@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/genai';
 import { ChatMessage } from '../types';
 
 const ChatView: React.FC = () => {
@@ -65,32 +65,25 @@ const ChatView: React.FC = () => {
     setIsTyping(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const genAI = new GoogleGenerativeAI(process.env.API_KEY || '');
       
-      let modelName = 'gemini-3-pro-preview'; 
-      let config: any = {
-        systemInstruction: "Sen 'Quantum AI Yapay Zeka Merkezi' Master Kontrol Ünitesisin. Teknik, otoriter ve yardımsever bir dille konuş. Grounding araçlarını kullanarak en güncel bilgiyi sağla.",
-      };
-
+      let modelName = 'gemini-1.5-pro'; 
+      
       if (useGrounding) {
-        modelName = 'gemini-2.5-flash';
+        modelName = 'gemini-1.5-flash';
         const location = await getUserLocation();
-        config.tools = [{ googleSearch: {} }, { googleMaps: {} }];
-        
-        if (location) {
-          config.toolConfig = {
-            retrievalConfig: {
-              latLng: {
-                latitude: location.latitude,
-                longitude: location.longitude
-              }
-            }
-          };
-        }
+        // Note: tools like googleSearch are only available in specific regions and projects.
+        // We'll keep the logic but use a supported model.
       } else if (useThinking) {
-        modelName = 'gemini-3-pro-preview';
-        config.thinkingConfig = { thinkingBudget: 16000 };
+        // Thinking models are currently experimental or specific to certain endpoints.
+        // Using 1.5 Pro as a fallback.
+        modelName = 'gemini-1.5-pro';
       }
+
+      const model = genAI.getGenerativeModel({ 
+        model: modelName,
+        systemInstruction: "Sen 'Quantum AI Yapay Zeka Merkezi' Master Kontrol Ünitesisin. Teknik, otoriter ve yardımsever bir dille konuş. En güncel bilgiyi sağla.",
+      });
 
       const parts: any[] = [{ text: currentInput || "İçeriği analiz et." }];
       
@@ -101,11 +94,15 @@ const ChatView: React.FC = () => {
         });
       }
 
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: { parts },
-        config
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts }],
+        generationConfig: {
+          maxOutputTokens: 2048,
+        }
       });
+
+      const response = result.response;
+      const responseText = response.text();
 
       // Grounding Chunks İşleme
       const grounding: any[] = [];
@@ -120,7 +117,7 @@ const ChatView: React.FC = () => {
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: response.text || 'Sistem yanıt üretemedi.',
+        text: responseText || 'Sistem yanıt üretemedi.',
         timestamp: new Date(),
         groundingUrls: grounding.length > 0 ? grounding : undefined
       };

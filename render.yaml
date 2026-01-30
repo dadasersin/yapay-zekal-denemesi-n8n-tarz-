@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: quantum-ai-center
+    runtime: static
+    buildCommand: npm run build
+    publishDir: dist
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+        placeholder: "Your Gemini API Key"

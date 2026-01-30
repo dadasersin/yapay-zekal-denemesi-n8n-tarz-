@@ -1,7 +1,5 @@
-services:
-  - type: web
-    name: quantum-ai-center
-    runtime: static
+staticSites:
+  - name: quantum-ai-center
     buildCommand: npm run build
     publishDir: dist
     envVars:
